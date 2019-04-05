@@ -2,6 +2,7 @@
 
 import os
 import numpy as np
+from oct2py import octave
 import scipy.io as sio
 import tensorflow as tf
 import constants
@@ -139,8 +140,11 @@ def save_iso_meshes(dfs, errs, semantics, filenames, isoval=1):
 
   tf.logging.info(
       'matlab -nodisplay -nosplash -nodesktop -r "{0}"'.format(command))
-  # Execute matlab.
-  os.system('matlab -nodisplay -nosplash -nodesktop -r "{0}"'.format(command))
+
+  # Execute octave
+  for i in range(len(filenames)):
+    octave.mat_to_obj(mat_filenames[i], filenames[i], isoval)
+
   # Clean up .mat files.
   for i in range(len(mat_filenames)):
     os.system('rm -f {0}'.format(mat_filenames[i]))
@@ -171,7 +175,6 @@ def bytes_feature(value):
 
 
 # Voxel group utility functions.
-
 
 def compute_voxel_group(tensor, group_id):
   """Extracts voxel group group_id (1-indexed) from (3, 4, or 5-dim) tensor."""

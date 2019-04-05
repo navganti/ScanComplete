@@ -218,12 +218,16 @@ def export_prediction_to_mesh(outprefix, input_sdf, output_df, output_sem,
   save_target = None if target_df is None else np.copy(save_input_sdf)
   save_input_sdf[:, FLAGS.pad_test:FLAGS.pad_test + scene_dim_y, :] = input_sdf
   save_prediction[:, FLAGS.pad_test:FLAGS.pad_test + scene_dim_y, :] = output_df
+
   if target_df is not None:
     save_target[:, FLAGS.pad_test:FLAGS.pad_test + scene_dim_y, :] = target_df
     # For error visualization as colors on mesh.
     save_errors = np.zeros(shape=save_prediction.shape)
     save_errors[:, FLAGS.pad_test:FLAGS.pad_test + scene_dim_y, :] = np.abs(
         output_df - target_df)
+  else:
+      save_errors = None
+
   if FLAGS.predict_semantics:
     save_pred_sem = np.zeros(shape=save_prediction.shape, dtype=np.uint8)
     save_pred_sem[:, FLAGS.pad_test:
@@ -233,6 +237,11 @@ def export_prediction_to_mesh(outprefix, input_sdf, output_df, output_sem,
       save_target_sem = np.zeros(shape=save_prediction.shape, dtype=np.uint8)
       save_target_sem[:, FLAGS.pad_test:
                       FLAGS.pad_test + scene_dim_y, :] = target_sem
+    else:
+        save_target_sem = None
+  else:
+      save_pred_sem = None
+      save_target_sem = None
 
   # Save as mesh.
   util.save_iso_meshes(
@@ -289,6 +298,7 @@ def create_model(scene_dim_x, scene_dim_y, scene_dim_z):
 
 def main(_):
   model_path = FLAGS.base_dir
+  print(model_path)
   output_folder = FLAGS.output_folder
   if not os.path.exists(output_folder):
     os.makedirs(output_folder)
@@ -299,6 +309,7 @@ def main(_):
        FLAGS.input_scene, FLAGS.height_input, FLAGS.pad_test,
        FLAGS.num_quant_levels, FLAGS.p_norm, FLAGS.predict_semantics)
   (scene_dim_z, scene_dim_y, scene_dim_x) = input_scan.shape[:3]
+
   # Init model.
   (input_placeholder, target_placeholder, target_lo_placeholder,
    target_sem_placeholder, target_sem_lo_placeholder, logits) = create_model(
@@ -312,12 +323,14 @@ def main(_):
 
   init_op = tf.group(tf.global_variables_initializer(),
                      tf.local_variables_initializer())
+
   # Run on the cpu - don't need to worry about scene sizes
   config = tf.ConfigProto( device_count = {'GPU': 0} )
   with tf.Session(config=config) as session:
     session.run(init_op)
     if FLAGS.model_checkpoint:
       checkpoint_path = os.path.join(model_path, FLAGS.model_checkpoint)
+      print(checkpoint_path)
     else:
       checkpoint_path = tf.train.latest_checkpoint(model_path)
     assign_fn = tf.contrib.framework.assign_from_checkpoint_fn(
