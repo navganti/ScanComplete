@@ -134,24 +134,20 @@ def save_iso_meshes(dfs, errs, semantics, filenames, isoval=1):
       continue
     err = None if errs is None else errs[i]
     save_mat_df(dfs[i], err, mat_filenames[i])
-    command += "mat_to_obj('{0}', '{1}', {2});".format(mat_filenames[i],
-                                                       filenames[i], isoval)
-  command += 'exit;'
 
-  tf.logging.info(
-      'matlab -nodisplay -nosplash -nodesktop -r "{0}"'.format(command))
+  tf.logging.info("octave mat_to_obj")
 
   # Execute octave
   for i in range(len(filenames)):
+    if dfs[i] is None:
+      continue
     octave.mat_to_obj(mat_filenames[i], filenames[i], isoval)
 
   # Clean up .mat files.
   for i in range(len(mat_filenames)):
     os.system('rm -f {0}'.format(mat_filenames[i]))
 
-
 # Export utility functions.
-
 
 def float_feature(value):
   """Wrapper for inserting float features into Example proto."""

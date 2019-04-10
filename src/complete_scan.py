@@ -264,11 +264,9 @@ def export_prediction_to_mesh(outprefix, input_sdf, output_df, output_sem,
   # Save as mesh.
   util.save_iso_meshes(
       [save_input_sdf, save_prediction, save_target],
-      [None, save_errors, save_errors], [None, save_pred_sem, save_target_sem],
-      [
-          outprefix + 'input.obj', outprefix + 'pred.obj',
-          outprefix + 'target.obj'
-      ],
+      [None, save_errors, save_errors],
+      [None, save_pred_sem, save_target_sem],
+      [outprefix + 'input.obj', outprefix + 'pred.obj', outprefix + 'target.obj'],
       isoval=1)
 
 

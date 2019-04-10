@@ -61,7 +61,7 @@ def import_sdf(filename):
         values[count] = float(line)
 
         if count % 100000 == 0:
-            print("Copied {} values! There are {} remaining.".format(count, len(values) - count))
+            print("There are {} values remaining.".format(len(values) - count - 1))
 
     values = values.tolist()
 
