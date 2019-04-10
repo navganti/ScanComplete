@@ -129,9 +129,9 @@ def read_inputs(filename, height, padding, num_quant_levels, p_norm,
   # Load previous level prediction.
   if not FLAGS.is_base_level:
     previous_file = os.path.join(
-        FLAGS.output_dir_prev, 'level' + str(FLAGS.hierarchy_level - 1) + '_' +
+        FLAGS.output_dir_prev, 'level' + str(FLAGS.hierarchy_level + 1) + '_' +
         os.path.splitext(os.path.basename(filename))[0] + 'pred.tfrecord')
-    tf.logging.info('Reading previous predictions frome file: %s',
+    tf.logging.info('Reading previous predictions from file: %s',
                     previous_file)
 
     assert os.path.isfile(previous_file)
