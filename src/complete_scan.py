@@ -90,9 +90,15 @@ def read_inputs(filename, height, padding, num_quant_levels, p_norm,
   if 'target_df' in feature_map.feature:
     target_scan = read_input_float_feature(
         feature_map, 'target_df', [scene_dim_z, scene_dim_y, scene_dim_x])
+  else:
+      target_scan = None
+
   if 'target_sem' in feature_map.feature:
     target_semantics = read_input_bytes_feature(
         feature_map, 'target_sem', [scene_dim_z, scene_dim_y, scene_dim_x])
+  else:
+      target_semantics = None
+
   # Adjust dimensions for model (clamp height, make even for voxel groups).
   height_y = min(height, scene_dim_y - padding)
   scene_dim_x = (scene_dim_x // 2) * 2
@@ -101,10 +107,12 @@ def read_inputs(filename, height, padding, num_quant_levels, p_norm,
   input_scan = input_scan[:scene_dim_z, padding:padding + scene_dim_y, :
                           scene_dim_x]
   input_scan = util.preprocess_sdf(input_scan, constants.TRUNCATION)
+
   if target_scan is not None:
     target_scan = target_scan[:scene_dim_z, padding:padding + scene_dim_y, :
                               scene_dim_x]
     target_scan = util.preprocess_df(target_scan, constants.TRUNCATION)
+
   if target_semantics is not None:
     target_semantics = target_semantics[:scene_dim_z, padding:
                                         padding + scene_dim_y, :scene_dim_x]
@@ -125,30 +133,40 @@ def read_inputs(filename, height, padding, num_quant_levels, p_norm,
         os.path.splitext(os.path.basename(filename))[0] + 'pred.tfrecord')
     tf.logging.info('Reading previous predictions frome file: %s',
                     previous_file)
+
     assert os.path.isfile(previous_file)
+
     for record in tf.python_io.tf_record_iterator(previous_file):
       prev_example = tf.train.Example()
       prev_example.ParseFromString(record)
       prev_feature_map = prev_example.features
+
     prediction_scan_low_resolution = read_input_float_feature(
         prev_feature_map, 'prediction_df', None)
+
     (prev_scene_dim_z, prev_scene_dim_y,
      prev_scene_dim_x) = prediction_scan_low_resolution.shape
+
     offset_z = (prev_scene_dim_z - scene_dim_z // 2) // 2
     offset_x = (prev_scene_dim_x - scene_dim_x // 2) // 2
+
     prediction_scan_low_resolution = prediction_scan_low_resolution[
         offset_z:offset_z + scene_dim_z // 2, :scene_dim_y // 2, offset_x:
         offset_x + scene_dim_x // 2]
+
     prediction_scan_low_resolution = util.preprocess_target_sdf(
         prediction_scan_low_resolution, num_quant_levels, constants.TRUNCATION,
         p_norm == 0)
+
     if predict_semantics:
       prediction_semantics_low_resolution = read_input_bytes_feature(
           prev_feature_map, 'prediction_sem',
           [prev_scene_dim_z, prev_scene_dim_y, prev_scene_dim_x])
+
       prediction_semantics_low_resolution = prediction_semantics_low_resolution[
           offset_z:offset_z + scene_dim_z // 2, :scene_dim_y // 2, offset_x:
           offset_x + scene_dim_x // 2]
+
   return (input_scan, target_scan, target_semantics,
           prediction_scan_low_resolution, prediction_semantics_low_resolution)
 

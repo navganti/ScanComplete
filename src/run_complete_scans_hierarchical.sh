@@ -29,10 +29,10 @@ OUTPUT_FOLDER_1=${BASE_OUTPUT_DIR}/vis_level1
 
 # Run hierarchy.
 
-# ------- hierarchy level 1 ------- #
+# ------- hierarchy level 3------- #
 
 IS_BASE_LEVEL=1
-HIERARCHY_LEVEL=1
+HIERARCHY_LEVEL=3
 HEIGHT_INPUT=16
 
 # Go through all test scenes.
@@ -84,10 +84,10 @@ for scene in $TEST_SCENES_PATH_2/*__0__.tfrecords; do
   fi
 done
 
-# ------- hierarchy level 3 ------- #
+# ------- hierarchy level 1 ------- #
 
 IS_BASE_LEVEL=0
-HIERARCHY_LEVEL=3
+HIERARCHY_LEVEL=1
 HEIGHT_INPUT=64
 
 # go thru all test scenes
