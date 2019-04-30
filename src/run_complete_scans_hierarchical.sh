@@ -37,7 +37,7 @@ HEIGHT_INPUT=16
 
 # Go through all test scenes.
 count=1
-for scene in $TEST_SCENES_PATH_3/*__0__.tfrecords; do
+for scene in $TEST_SCENES_PATH_3/*.tfrecords; do
   echo "Processing hierarchy level 3, scene $count of $MAX_NUM_TEST_SCENES: $scene".
   python complete_scan.py \
     --alsologtostderr \
@@ -64,7 +64,7 @@ HEIGHT_INPUT=32
 
 # go thru all test scenes
 count=1
-for scene in $TEST_SCENES_PATH_2/*__0__.tfrecords; do
+for scene in $TEST_SCENES_PATH_2/*.tfrecords; do
   echo "Processing hierarchy level 2, scene $count of $MAX_NUM_TEST_SCENES: $scene".
   python complete_scan.py \
     --alsologtostderr \
@@ -92,7 +92,7 @@ HEIGHT_INPUT=64
 
 # go thru all test scenes
 count=1
-for scene in $TEST_SCENES_PATH_1/*__0__.tfrecords; do
+for scene in $TEST_SCENES_PATH_1/*.tfrecords; do
   echo "Processing hierarchy level 1, scene $count of $MAX_NUM_TEST_SCENES: $scene".
   python complete_scan.py \
     --alsologtostderr \

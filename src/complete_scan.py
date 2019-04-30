@@ -1,6 +1,6 @@
 """Applies model to a single test scene and exports results.
 
-(Note: uses matlab to convert predicted complete dfs to meshes.)
+(Note: uses octave to convert predicted complete dfs to meshes.)
 """
 
 import os
@@ -34,6 +34,7 @@ flags.DEFINE_integer('p_norm', 1, 'P-norm loss (0 to disable).')
 flags.DEFINE_bool('predict_semantics', False,
                   'Also predict semantic labels per-voxel.')
 flags.DEFINE_float('temperature', 100.0, 'Softmax temperature for sampling.')
+flags.DEFINE_float('voxel_size', 0.047, 'Size of each voxel square.')
 
 
 def read_input_float_feature(feature_map, key, shape):
@@ -83,21 +84,14 @@ def read_inputs(filename, height, padding, num_quant_levels, p_norm,
     example = tf.train.Example()
     example.ParseFromString(record)
     feature_map = example.features
+
   # Input scan as sdf.
   input_scan = read_input_float_feature(feature_map, 'input_sdf', shape=None)
   (scene_dim_z, scene_dim_y, scene_dim_x) = input_scan.shape
-  # Target scan as df.
-  if 'target_df' in feature_map.feature:
-    target_scan = read_input_float_feature(
-        feature_map, 'target_df', [scene_dim_z, scene_dim_y, scene_dim_x])
-  else:
-      target_scan = None
 
-  if 'target_sem' in feature_map.feature:
-    target_semantics = read_input_bytes_feature(
-        feature_map, 'target_sem', [scene_dim_z, scene_dim_y, scene_dim_x])
-  else:
-      target_semantics = None
+  # Target scan as df.
+  target_scan = None
+  target_semantics = None
 
   # Adjust dimensions for model (clamp height, make even for voxel groups).
   height_y = min(height, scene_dim_y - padding)
@@ -112,11 +106,6 @@ def read_inputs(filename, height, padding, num_quant_levels, p_norm,
     target_scan = target_scan[:scene_dim_z, padding:padding + scene_dim_y, :
                               scene_dim_x]
     target_scan = util.preprocess_df(target_scan, constants.TRUNCATION)
-
-  if target_semantics is not None:
-    target_semantics = target_semantics[:scene_dim_z, padding:
-                                        padding + scene_dim_y, :scene_dim_x]
-    target_semantics = util.preprocess_target_sem(target_semantics)
 
   # Default values for previous resolution inputs.
   prediction_scan_low_resolution = np.zeros(
@@ -208,6 +197,11 @@ def create_dfs_from_output(input_sdf, output_df, target_scan):
         FLAGS.num_quant_levels - 1)
     output_df = util.dequantize(output_df, FLAGS.num_quant_levels,
                                 constants.TRUNCATION)
+
+  # Convert units to be in distance units, not voxel.
+  # input_sdf = input_sdf * FLAGS.voxel_size
+  # output_df = output_df * FLAGS.voxel_size
+
   return input_sdf, output_df
 
 
@@ -378,6 +372,7 @@ def main(_):
     # Cache these features.
     feature_groups_ = session.run(feature_groups, feed_dict)
     for n in range(8):
+      print('Predicting group [{}/{}]'.format(n + 1, 8))
       tf.logging.info('Predicting group [%d/%d]', n + 1, 8)
       # Predict
       feed_dict[feature_groups[n]] = feature_groups_[n]
