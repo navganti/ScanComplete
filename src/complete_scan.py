@@ -90,8 +90,17 @@ def read_inputs(filename, height, padding, num_quant_levels, p_norm,
   (scene_dim_z, scene_dim_y, scene_dim_x) = input_scan.shape
 
   # Target scan as df.
-  target_scan = None
-  target_semantics = None
+  if 'target_df' in feature_map.feature:
+      target_scan = read_input_float_feature(
+          feature_map, 'target_df', [scene_dim_z, scene_dim_y, scene_dim_x])
+  else:
+      target_scan = None
+
+  if 'target_sem' in feature_map.feature:
+      target_semantics = read_input_bytes_feature(
+          feature_map, 'target_sem', [scene_dim_z, scene_dim_y, scene_dim_x])
+  else:
+      target_semantics = None
 
   # Adjust dimensions for model (clamp height, make even for voxel groups).
   height_y = min(height, scene_dim_y - padding)
@@ -107,13 +116,17 @@ def read_inputs(filename, height, padding, num_quant_levels, p_norm,
                               scene_dim_x]
     target_scan = util.preprocess_df(target_scan, constants.TRUNCATION)
 
+  if target_semantics is not None:
+      target_semantics = target_semantics[:scene_dim_z, padding:
+                                                        padding + scene_dim_y,
+                         :scene_dim_x]
+      target_semantics = util.preprocess_target_sem(target_semantics)
+
   # Default values for previous resolution inputs.
   prediction_scan_low_resolution = np.zeros(
       [scene_dim_z // 2, scene_dim_y // 2, scene_dim_x // 2, 2])
   prediction_semantics_low_resolution = np.zeros(
       [scene_dim_z // 2, scene_dim_y // 2, scene_dim_x // 2], dtype=np.uint8)
-  if target_semantics is None:
-    target_semantics = np.zeros([scene_dim_z, scene_dim_y, scene_dim_x])
 
   # Load previous level prediction.
   if not FLAGS.is_base_level:
@@ -173,6 +186,7 @@ def predict_from_model(logit_groups_geometry, logit_groups_semantics,
       samples = tf.multinomial(temperature * logit_group, 1)
       predictions_geometry_list.append(
           tf.reshape(samples, logit_group_shape[:-1]))
+
   predictions_semantics_list = []
   if FLAGS.predict_semantics:
     for logit_group in logit_groups_semantics:
@@ -181,11 +195,13 @@ def predict_from_model(logit_groups_geometry, logit_groups_semantics,
     predictions_semantics_list = [
         tf.zeros(shape=predictions_geometry_list[0].shape, dtype=tf.uint8)
     ] * len(predictions_geometry_list)
+
   return predictions_geometry_list, predictions_semantics_list
 
 
 def create_dfs_from_output(input_sdf, output_df, target_scan):
   """Rescales model output to distance fields (in voxel units)."""
+  # Sets in range 0 -> constants.TRUNCATION.
   input_sdf = (input_sdf[0, :, :, :, 0].astype(np.float32) + 1
               ) * 0.5 * constants.TRUNCATION
   if FLAGS.p_norm > 0:
