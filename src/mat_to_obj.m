@@ -8,6 +8,7 @@ function mat_to_obj(matfilename, objfilename, isoval)
   %     isoval is the value at which to extract the isosurface.
   volume = load(matfilename);
   [faces, vertices] = isosurface(volume.x, isoval);
+
   if isfield(volume, 'errors') % compute hsv colors for errors
     errs = volume.errors;
     max_err = 3;
@@ -63,7 +64,7 @@ function SaveVerticesAndFacesAsObj(v, f, name, vc)
   % SaveVerticesAndFacesAsObj(v,f,fname,vc)
   %     v is a Nx3 matrix of vertex coordinates.
   %     f is a Mx3 matrix of vertex indices.
-  %     fname is the filename to save the obj file.
+  %     name is the filename to save the obj file.
   %     vc (optional) is a Nx3 matrix of vertex colors.
   % Check for valid number of function arguments.
   msg = nargchk(3, 4, nargin);
@@ -72,8 +73,8 @@ function SaveVerticesAndFacesAsObj(v, f, name, vc)
   fid = fopen(name,'w');
 
   if nargin == 4
-    for i=1:size(v,1)
-      fprintf(fid,'v %f %f %f %f %f %f\n',v(i,1),v(i,2),v(i,3),vc(i,1),vc(i,2),vc(i,3));
+    for i = 1:size(v, 1)
+      fprintf(fid,'v %f %f %f %f %f %f\n', v(i,1), v(i,2), v(i,3), vc(i,1), vc(i,2), vc(i,3));
     end
   else
     for i=1:size(v,1)

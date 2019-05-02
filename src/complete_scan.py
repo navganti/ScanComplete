@@ -23,7 +23,8 @@ flags.DEFINE_string('output_dir_prev', '', 'Output folder for previous level.')
 flags.DEFINE_string('output_folder', '/tmp/vis',
                     'Folder in which to put the results.')
 # Parameters for applying model.
-flags.DEFINE_integer('height_input', 64, 'Input block y dim.')
+flags.DEFINE_integer('height_input', 80, 'Input block y dim.')
+flags.DEFINE_integer('truncated_height_input', 64, 'Truncated input block y dim (to remove plane)')
 flags.DEFINE_integer('hierarchy_level', 1, 'Hierachy level (1: finest level).')
 flags.DEFINE_bool('is_base_level', True, 'If base level of hierarchy.')
 flags.DEFINE_integer('num_quant_levels', 256, 'Number of quantization bins.')
@@ -200,25 +201,23 @@ def predict_from_model(logit_groups_geometry, logit_groups_semantics,
 
 
 def create_dfs_from_output(input_sdf, output_df, target_scan):
-  """Rescales model output to distance fields (in voxel units)."""
-  # Sets in range 0 -> constants.TRUNCATION.
-  input_sdf = (input_sdf[0, :, :, :, 0].astype(np.float32) + 1
-              ) * 0.5 * constants.TRUNCATION
-  if FLAGS.p_norm > 0:
-    factor = 0.5 if target_scan is not None else 1.0
-    output_df = factor * constants.TRUNCATION * (
-        output_df[0, :, :, :, 0] + 1)
-  else:
-    output_df = (output_df[0, :, :, :, 0] + 1) * 0.5 * (
-        FLAGS.num_quant_levels - 1)
-    output_df = util.dequantize(output_df, FLAGS.num_quant_levels,
-                                constants.TRUNCATION)
+    """Rescales model output to distance fields (in voxel units)."""
+    # Sets in range 0 -> constants.TRUNCATION.
+    input_sdf = (input_sdf[0, :, :, :, 0].astype(np.float32)) \
+                * constants.TRUNCATION
 
-  # Convert units to be in distance units, not voxel.
-  # input_sdf = input_sdf * FLAGS.voxel_size
-  # output_df = output_df * FLAGS.voxel_size
+    if FLAGS.p_norm > 0:
+        output_df = (output_df[0, :, :, :, 0]) * constants.TRUNCATION
+    else:
+        output_df = (output_df[0, :, :, :, 0] + 1) * 0.5 \
+                    * (FLAGS.num_quant_levels - 1)
+        output_df = util.dequantize(output_df, FLAGS.num_quant_levels, constants.TRUNCATION)
 
-  return input_sdf, output_df
+    # Convert voxel values back to distance values.
+    input_sdf = input_sdf * FLAGS.voxel_size
+    output_df = output_df * FLAGS.voxel_size
+
+    return input_sdf, output_df
 
 
 def export_prediction_to_example(filename, pred_geo, pred_sem):
@@ -237,47 +236,49 @@ def export_prediction_to_example(filename, pred_geo, pred_sem):
 
 def export_prediction_to_mesh(outprefix, input_sdf, output_df, output_sem,
                               target_df, target_sem):
-  """Saves predicted df/sem + input (+ target, if any) to mesh visualization."""
-  # Add back (below floor) padding for vis (creates the surface on the bottom).
-  (scene_dim_z, scene_dim_y, scene_dim_x) = input_sdf.shape
-  save_input_sdf = constants.TRUNCATION * np.ones(
-      [scene_dim_z, 2 * FLAGS.pad_test + scene_dim_y, scene_dim_x])
-  save_prediction = np.copy(save_input_sdf)
-  save_target = None if target_df is None else np.copy(save_input_sdf)
-  save_input_sdf[:, FLAGS.pad_test:FLAGS.pad_test + scene_dim_y, :] = input_sdf
-  save_prediction[:, FLAGS.pad_test:FLAGS.pad_test + scene_dim_y, :] = output_df
+    # Calculate difference between truncated height and input height.
+    # used to clip off the plane generated at the bottom of the model.
+    trunc_dist = FLAGS.height_input - FLAGS.truncated_height_input
+    half_trunc = trunc_dist // 2
 
-  if target_df is not None:
-    save_target[:, FLAGS.pad_test:FLAGS.pad_test + scene_dim_y, :] = target_df
-    # For error visualization as colors on mesh.
-    save_errors = np.zeros(shape=save_prediction.shape)
-    save_errors[:, FLAGS.pad_test:FLAGS.pad_test + scene_dim_y, :] = np.abs(
-        output_df - target_df)
-  else:
-      save_errors = None
+    assert(trunc_dist >= 0)
 
-  if FLAGS.predict_semantics:
-    save_pred_sem = np.zeros(shape=save_prediction.shape, dtype=np.uint8)
-    save_pred_sem[:, FLAGS.pad_test:
-                  FLAGS.pad_test + scene_dim_y, :] = output_sem
-    save_pred_sem[np.greater(save_prediction, 1)] = 0
-    if target_sem is not None:
-      save_target_sem = np.zeros(shape=save_prediction.shape, dtype=np.uint8)
-      save_target_sem[:, FLAGS.pad_test:
-                      FLAGS.pad_test + scene_dim_y, :] = target_sem
+    # Saves predicted df/sem + input (+ target, if any) to mesh visualization.
+    (scene_dim_z, scene_dim_y, scene_dim_x) = input_sdf.shape
+    save_input_sdf = input_sdf[:, half_trunc:scene_dim_y - half_trunc, :]
+    save_prediction = output_df[:, half_trunc:scene_dim_y - half_trunc, :]
+    save_target = None
+
+    if target_df is not None:
+        save_target = target_df[:, half_trunc:scene_dim_y - half_trunc, :]
+
+        # For error visualization as colors on mesh.
+        save_errors = np.zeros(shape=save_prediction.shape)
+        save_errors = np.abs(output_df - target_df)
     else:
-        save_target_sem = None
-  else:
+        save_errors = None
+
+    if FLAGS.predict_semantics:
+        save_pred_sem = np.zeros(shape=save_prediction.shape, dtype=np.uint8)
+        save_pred_sem[:, half_trunc:scene_dim_y - half_trunc, :] = output_sem
+        save_pred_sem[np.greater(save_prediction, 1)] = 0
+
+        if target_sem is not None:
+          save_target_sem = np.zeros(shape=save_prediction.shape, dtype=np.uint8)
+          save_target_sem[:, half_trunc:scene_dim_y - half_trunc, :] = target_sem
+        else:
+            save_target_sem = None
+    else:
       save_pred_sem = None
       save_target_sem = None
 
-  # Save as mesh.
-  util.save_iso_meshes(
+    # Save as mesh.
+    util.save_iso_meshes(
       [save_input_sdf, save_prediction, save_target],
       [None, save_errors, save_errors],
       [None, save_pred_sem, save_target_sem],
       [outprefix + 'input.obj', outprefix + 'pred.obj', outprefix + 'target.obj'],
-      isoval=1)
+      isoval=0)
 
 
 def create_model(scene_dim_x, scene_dim_y, scene_dim_z):
