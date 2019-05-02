@@ -278,7 +278,7 @@ def export_prediction_to_mesh(outprefix, input_sdf, output_df, output_sem,
       [None, save_errors, save_errors],
       [None, save_pred_sem, save_target_sem],
       [outprefix + 'input.obj', outprefix + 'pred.obj', outprefix + 'target.obj'],
-      isoval=0)
+      isoval=-FLAGS.voxel_size)
 
 
 def create_model(scene_dim_x, scene_dim_y, scene_dim_z):

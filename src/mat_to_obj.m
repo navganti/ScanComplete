@@ -64,7 +64,7 @@ function SaveVerticesAndFacesAsObj(v, f, name, vc)
   % SaveVerticesAndFacesAsObj(v,f,fname,vc)
   %     v is a Nx3 matrix of vertex coordinates.
   %     f is a Mx3 matrix of vertex indices.
-  %     name is the filename to save the obj file.
+  %     fname is the filename to save the obj file.
   %     vc (optional) is a Nx3 matrix of vertex colors.
   % Check for valid number of function arguments.
   msg = nargchk(3, 4, nargin);
@@ -73,7 +73,7 @@ function SaveVerticesAndFacesAsObj(v, f, name, vc)
   fid = fopen(name,'w');
 
   if nargin == 4
-    for i = 1:size(v, 1)
+    for i=1:size(v,1)
       fprintf(fid,'v %f %f %f %f %f %f\n', v(i,1), v(i,2), v(i,3), vc(i,1), vc(i,2), vc(i,3));
     end
   else
