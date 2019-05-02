@@ -5,5 +5,5 @@ data/
 vis/
 *.pyc
 octave-workspace
-
+src/?*
 
