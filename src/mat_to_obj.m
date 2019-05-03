@@ -1,13 +1,32 @@
-
-
-function mat_to_obj(matfilename, objfilename, isoval)
+function mat_to_obj(matfilename, objfilename, isoval, min_bounds, voxel_size)
   % mat_to_obj Convert a .mat file (of a df) to an .obj file of the isosurface at isoval.
   % mat_to_obj(matfilename, objfilename, isoval)
   %     matfilename is the filename the .mat file to process.
   %     objfilename is the filename to save the obj file.
   %     isoval is the value at which to extract the isosurface.
   volume = load(matfilename);
-  [faces, vertices] = isosurface(volume.x, isoval);
+
+  X = zeros(1, size(volume.x)(1));
+  Y = zeros(1, size(volume.x)(2));
+  Z = zeros(1, size(volume.x)(3));
+  
+  for i = 1:length(X)
+    X(i) = min_bounds(1) + (i - 1)*voxel_size;
+  end
+
+  for j = 1:length(Y)
+    Y(j) = min_bounds(2) + (j - 1)*voxel_size;
+  end
+   
+  for k = 1:length(Z)
+    Z(k) = min_bounds(3) + (k - 1)*voxel_size;
+  end 
+ 
+  % Set up meshgrid for the bounds. 
+  % meshgrid transposes the first two values.
+  [x, y, z] = meshgrid(Y, X, Z);
+
+  [faces, vertices] = isosurface(x, y, z, volume.x, isoval);
 
   if isfield(volume, 'errors') % compute hsv colors for errors
     errs = volume.errors;
@@ -74,18 +93,20 @@ function SaveVerticesAndFacesAsObj(v, f, name, vc)
 
   if nargin == 4
     for i=1:size(v,1)
-      fprintf(fid,'v %f %f %f %f %f %f\n', v(i,1), v(i,2), v(i,3), vc(i,1), vc(i,2), vc(i,3));
+      fprintf(fid,'v %f %f %f %f %f %f\n', v(i,3), v(i,1), v(i,2), vc(i,3), vc(i,1), vc(i,2));
     end
   else
     for i=1:size(v,1)
       % Swap axes to account for voxblox and matlab indexing
+      % x -> z, y -> x, z -> y
       fprintf(fid,'v %f %f %f\n', v(i,3),v(i,1),v(i,2));
     end
   end
   fprintf(fid,'g foo\n');
 
-  for i=1:size(f,1);
+  for i=1:size(f,1)
     % Swap axes to account for voxblox and matlab indexing
+    % x -> z, y -> x, z -> y
     fprintf(fid,'f %d %d %d\n', f(i,3),f(i,1),f(i,2));
   end
   fprintf(fid,'g\n');

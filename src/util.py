@@ -114,11 +114,12 @@ def save_mat_df(df, error, filename):
   sio.savemat(filename, output)
 
 
-def save_iso_meshes(dfs, errs, semantics, filenames, isoval=1):
+def save_iso_meshes(dfs, errs, semantics, filenames, min_bounds, voxel_size, isoval=1):
   """Saves dfs to obj files (by calling matlab's 'isosurface' function)."""
   assert len(dfs) == len(filenames) and (
       errs is None or len(dfs) == len(errs)) and (semantics is None or
                                                   len(dfs) == len(semantics))
+
   # Save semantics meshes if applicable.
   if semantics is not None:
     for i in range(len(filenames)):
@@ -141,7 +142,11 @@ def save_iso_meshes(dfs, errs, semantics, filenames, isoval=1):
   for i in range(len(filenames)):
     if dfs[i] is None:
       continue
-    octave.mat_to_obj(mat_filenames[i], filenames[i], isoval)
+    octave.mat_to_obj(mat_filenames[i],
+                      filenames[i],
+                      isoval,
+                      min_bounds,
+                      voxel_size)
 
   # Clean up .mat files.
   for i in range(len(mat_filenames)):

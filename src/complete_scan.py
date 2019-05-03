@@ -63,10 +63,10 @@ def read_input_bytes_feature(feature_map, key, shape):
 
 def read_inputs(filename, height, padding, num_quant_levels, p_norm,
                 predict_semantics):
-  """Reads inputs for scan completion.
+    """Reads inputs for scan completion.
 
-  Reads input_sdf, target_df/sem (if any), previous predicted df/sem (if any).
-  Args:
+    Reads input_sdf, target_df/sem (if any), previous predicted df/sem (if any).
+    Args:
     filename: TFRecord containing input_sdf.
     height: height in voxels to be processed by model.
     padding: amount of padding (in voxels) around test scene (height is cropped
@@ -74,104 +74,123 @@ def read_inputs(filename, height, padding, num_quant_levels, p_norm,
     num_quant_levels: amount of quantization (if applicable).
     p_norm: which p-norm is used (0, 1, 2; 0 for none).
     predict_semantics: whether semantics is predicted.
-  Returns:
+    Returns:
     input scan: input_scan as np array.
     ground truth targets: target_scan/target_semantics as np arrays (if any).
     previous resolution predictions: prediction_scan_low_resolution /
                                      prediction_semantics_low_resolution as
                                      np arrays (if any).
-  """
-  for record in tf.python_io.tf_record_iterator(filename):
-    example = tf.train.Example()
-    example.ParseFromString(record)
-    feature_map = example.features
+    """
+    for record in tf.python_io.tf_record_iterator(filename):
+        example = tf.train.Example()
+        example.ParseFromString(record)
+        feature_map = example.features
 
-  # Input scan as sdf.
-  input_scan = read_input_float_feature(feature_map, 'input_sdf', shape=None)
-  (scene_dim_z, scene_dim_y, scene_dim_x) = input_scan.shape
+    # Input scan as sdf.
+    input_scan = read_input_float_feature(feature_map, 'input_sdf', shape=None)
+    (scene_dim_z, scene_dim_y, scene_dim_x) = input_scan.shape
 
-  # Target scan as df.
-  if 'target_df' in feature_map.feature:
-      target_scan = read_input_float_feature(
-          feature_map, 'target_df', [scene_dim_z, scene_dim_y, scene_dim_x])
-  else:
-      target_scan = None
+    # Target scan as df.
+    if 'target_df' in feature_map.feature:
+        target_scan = read_input_float_feature(
+        feature_map, 'target_df', [scene_dim_z, scene_dim_y, scene_dim_x])
+    else:
+        target_scan = None
 
-  if 'target_sem' in feature_map.feature:
-      target_semantics = read_input_bytes_feature(
+    if 'target_sem' in feature_map.feature:
+        target_semantics = read_input_bytes_feature(
           feature_map, 'target_sem', [scene_dim_z, scene_dim_y, scene_dim_x])
-  else:
-      target_semantics = None
+    else:
+        target_semantics = None
 
-  # Adjust dimensions for model (clamp height, make even for voxel groups).
-  height_y = min(height, scene_dim_y - padding)
-  scene_dim_x = (scene_dim_x // 2) * 2
-  scene_dim_y = (height_y // 2) * 2
-  scene_dim_z = (scene_dim_z // 2) * 2
-  input_scan = input_scan[:scene_dim_z, padding:padding + scene_dim_y, :
+    if 'min_bounds' in feature_map.feature:
+        (min_z, min_y, min_x) = feature_map.feature['min_bounds'].float_list.value
+        min_bounds = [min_z, min_y, min_x]
+        bounds_set = True
+    else:
+        min_bounds = [0, 0, 0]
+        bounds_set = False
+
+    # Adjust dimensions for model (clamp height, make even for voxel groups).
+    scene_dim_x = (scene_dim_x // 2) * 2
+
+    height_y = min(height, scene_dim_y - padding)
+    scene_dim_y = (height_y // 2) * 2
+
+    scene_dim_z = (scene_dim_z // 2) * 2
+
+    input_scan = input_scan[:scene_dim_z, padding:padding + scene_dim_y, :
                           scene_dim_x]
-  input_scan = util.preprocess_sdf(input_scan, constants.TRUNCATION)
 
-  if target_scan is not None:
-    target_scan = target_scan[:scene_dim_z, padding:padding + scene_dim_y, :
-                              scene_dim_x]
-    target_scan = util.preprocess_df(target_scan, constants.TRUNCATION)
+    # Adjust y-bounds here.
+    if bounds_set:
+        # Because of the padding & clamping we need to adjust the origin in y.
+        min_bounds[1] += padding * FLAGS.voxel_size
 
-  if target_semantics is not None:
-      target_semantics = target_semantics[:scene_dim_z, padding:
+    input_scan = util.preprocess_sdf(input_scan, constants.TRUNCATION)
+
+    if target_scan is not None:
+        target_scan = target_scan[:scene_dim_z, padding:padding + scene_dim_y, :
+                                  scene_dim_x]
+
+        target_scan = util.preprocess_df(target_scan, constants.TRUNCATION)
+
+    if target_semantics is not None:
+        target_semantics = target_semantics[:scene_dim_z, padding:
                                                         padding + scene_dim_y,
                          :scene_dim_x]
-      target_semantics = util.preprocess_target_sem(target_semantics)
+        target_semantics = util.preprocess_target_sem(target_semantics)
 
-  # Default values for previous resolution inputs.
-  prediction_scan_low_resolution = np.zeros(
+    # Default values for previous resolution inputs.
+    prediction_scan_low_resolution = np.zeros(
       [scene_dim_z // 2, scene_dim_y // 2, scene_dim_x // 2, 2])
-  prediction_semantics_low_resolution = np.zeros(
+    prediction_semantics_low_resolution = np.zeros(
       [scene_dim_z // 2, scene_dim_y // 2, scene_dim_x // 2], dtype=np.uint8)
 
-  # Load previous level prediction.
-  if not FLAGS.is_base_level:
-    previous_file = os.path.join(
-        FLAGS.output_dir_prev, 'level' + str(FLAGS.hierarchy_level + 1) + '_' +
-        os.path.splitext(os.path.basename(filename))[0] + 'pred.tfrecord')
-    tf.logging.info('Reading previous predictions from file: %s',
-                    previous_file)
+    # Load previous level prediction.
+    if not FLAGS.is_base_level:
+        previous_file = os.path.join(
+            FLAGS.output_dir_prev, 'level' + str(FLAGS.hierarchy_level + 1) + '_' +
+            os.path.splitext(os.path.basename(filename))[0] + 'pred.tfrecord')
+        tf.logging.info('Reading previous predictions from file: %s',
+                        previous_file)
 
-    assert os.path.isfile(previous_file)
+        assert os.path.isfile(previous_file)
 
-    for record in tf.python_io.tf_record_iterator(previous_file):
-      prev_example = tf.train.Example()
-      prev_example.ParseFromString(record)
-      prev_feature_map = prev_example.features
+        for record in tf.python_io.tf_record_iterator(previous_file):
+          prev_example = tf.train.Example()
+          prev_example.ParseFromString(record)
+          prev_feature_map = prev_example.features
 
-    prediction_scan_low_resolution = read_input_float_feature(
-        prev_feature_map, 'prediction_df', None)
+        prediction_scan_low_resolution = read_input_float_feature(
+            prev_feature_map, 'prediction_df', None)
 
-    (prev_scene_dim_z, prev_scene_dim_y,
-     prev_scene_dim_x) = prediction_scan_low_resolution.shape
+        (prev_scene_dim_z, prev_scene_dim_y,
+         prev_scene_dim_x) = prediction_scan_low_resolution.shape
 
-    offset_z = (prev_scene_dim_z - scene_dim_z // 2) // 2
-    offset_x = (prev_scene_dim_x - scene_dim_x // 2) // 2
+        offset_z = (prev_scene_dim_z - scene_dim_z // 2) // 2
+        offset_x = (prev_scene_dim_x - scene_dim_x // 2) // 2
 
-    prediction_scan_low_resolution = prediction_scan_low_resolution[
-        offset_z:offset_z + scene_dim_z // 2, :scene_dim_y // 2, offset_x:
-        offset_x + scene_dim_x // 2]
+        prediction_scan_low_resolution = prediction_scan_low_resolution[
+            offset_z:offset_z + scene_dim_z // 2, :scene_dim_y // 2, offset_x:
+            offset_x + scene_dim_x // 2]
 
-    prediction_scan_low_resolution = util.preprocess_target_sdf(
-        prediction_scan_low_resolution, num_quant_levels, constants.TRUNCATION,
-        p_norm == 0)
+        prediction_scan_low_resolution = util.preprocess_target_sdf(
+            prediction_scan_low_resolution, num_quant_levels, constants.TRUNCATION,
+            p_norm == 0)
 
-    if predict_semantics:
-      prediction_semantics_low_resolution = read_input_bytes_feature(
-          prev_feature_map, 'prediction_sem',
-          [prev_scene_dim_z, prev_scene_dim_y, prev_scene_dim_x])
+        if predict_semantics:
+            prediction_semantics_low_resolution = read_input_bytes_feature(
+            prev_feature_map, 'prediction_sem',
+            [prev_scene_dim_z, prev_scene_dim_y, prev_scene_dim_x])
 
-      prediction_semantics_low_resolution = prediction_semantics_low_resolution[
-          offset_z:offset_z + scene_dim_z // 2, :scene_dim_y // 2, offset_x:
-          offset_x + scene_dim_x // 2]
+            prediction_semantics_low_resolution = prediction_semantics_low_resolution[
+              offset_z:offset_z + scene_dim_z // 2, :scene_dim_y // 2, offset_x:
+              offset_x + scene_dim_x // 2]
 
-  return (input_scan, target_scan, target_semantics,
-          prediction_scan_low_resolution, prediction_semantics_low_resolution)
+    return (input_scan, target_scan, target_semantics,
+          prediction_scan_low_resolution, prediction_semantics_low_resolution,
+          min_bounds)
 
 
 def predict_from_model(logit_groups_geometry, logit_groups_semantics,
@@ -200,7 +219,7 @@ def predict_from_model(logit_groups_geometry, logit_groups_semantics,
   return predictions_geometry_list, predictions_semantics_list
 
 
-def create_dfs_from_output(input_sdf, output_df, target_scan):
+def create_dfs_from_output(input_sdf, output_df):
     """Rescales model output to distance fields (in voxel units)."""
     # Sets in range 0 -> constants.TRUNCATION.
     input_sdf = (input_sdf[0, :, :, :, 0].astype(np.float32) + 1) \
@@ -235,7 +254,7 @@ def export_prediction_to_example(filename, pred_geo, pred_sem):
 
 
 def export_prediction_to_mesh(outprefix, input_sdf, output_df, output_sem,
-                              target_df, target_sem):
+                              target_df, target_sem, min_bounds, voxel_size):
     # Calculate difference between truncated height and input height.
     # used to clip off the plane generated at the bottom of the model.
     trunc_dist = FLAGS.height_input - FLAGS.truncated_height_input
@@ -248,6 +267,9 @@ def export_prediction_to_mesh(outprefix, input_sdf, output_df, output_sem,
     save_input_sdf = input_sdf[:, half_trunc:scene_dim_y - half_trunc, :]
     save_prediction = output_df[:, half_trunc:scene_dim_y - half_trunc, :]
     save_target = None
+
+    # Modify the y-bounds to handle truncation.
+    min_bounds[1] += half_trunc * voxel_size
 
     if target_df is not None:
         save_target = target_df[:, half_trunc:scene_dim_y - half_trunc, :]
@@ -272,13 +294,16 @@ def export_prediction_to_mesh(outprefix, input_sdf, output_df, output_sem,
       save_pred_sem = None
       save_target_sem = None
 
+    isoval = FLAGS.voxel_size
+
     # Save as mesh.
     util.save_iso_meshes(
       [save_input_sdf, save_prediction, save_target],
       [None, save_errors, save_errors],
       [None, save_pred_sem, save_target_sem],
       [outprefix + 'input.obj', outprefix + 'pred.obj', outprefix + 'target.obj'],
-      isoval=FLAGS.voxel_size)
+      min_bounds, voxel_size,
+      isoval)
 
 
 def create_model(scene_dim_x, scene_dim_y, scene_dim_z):
@@ -332,7 +357,7 @@ def main(_):
 
   # First load the data to figure out sizes of things.
   (input_scan, target_scan, target_semantics, prediction_scan_low_resolution,
-   prediction_semantics_low_resolution) = read_inputs(
+   prediction_semantics_low_resolution, min_bounds) = read_inputs(
        FLAGS.input_scene, FLAGS.height_input, FLAGS.pad_test,
        FLAGS.num_quant_levels, FLAGS.p_norm, FLAGS.predict_semantics)
   (scene_dim_z, scene_dim_y, scene_dim_x) = input_scan.shape[:3]
@@ -416,7 +441,7 @@ def main(_):
     output_prediction_semantics = output_prediction_semantics[0]
     # Make distances again.
     input_scan, output_prediction_scan = create_dfs_from_output(
-        input_scan, output_prediction_scan, target_scan)
+        input_scan, output_prediction_scan)
 
     outprefix = os.path.join(
         output_folder, 'level' + str(FLAGS.hierarchy_level) + '_' +
@@ -428,7 +453,7 @@ def main(_):
     # Save mesh visualization output.
     export_prediction_to_mesh(outprefix, input_scan, output_prediction_scan,
                               output_prediction_semantics, target_scan,
-                              target_semantics)
+                              target_semantics, min_bounds, FLAGS.voxel_size)
 
 
 if __name__ == '__main__':
